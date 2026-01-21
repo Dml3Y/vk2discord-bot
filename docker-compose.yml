@@ -1,0 +1,19 @@
+version: '3.8'
+
+services:
+  vk2discord-bot:
+    build: .
+    container_name: vk2discord-bot
+    restart: unless-stopped
+    environment:
+      - VK_TOKEN=${VK_TOKEN}
+      - DISCORD_WEBHOOK=${DISCORD_WEBHOOK}
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./data:/app/data
+      - ./logs:/app/logs
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

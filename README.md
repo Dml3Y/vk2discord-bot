@@ -1,2 +1,10 @@
-# vk2discord-bot
- Automatically publish posts from VKontakte to Discord
+# VK2Discord Bot 🤖
+
+Автоматическая публикация постов из ВКонтакте в Discord с использованием Docker.
+
+## 🚀 Быстрый старт
+
+### 1. Клонируйте репозиторий
+```bash
+git clone https://github.com/ваш-username/vk2discord-bot.git
+cd vk2discord-bot

@@ -1,0 +1,34 @@
+# Конфигурация VK2Discord Bot
+
+# Настройки ВКонтакте
+vk:
+  token: ${VK_TOKEN}  # Используется из .env
+
+# Настройки Discord
+discord:
+  webhook: ${DISCORD_WEBHOOK}  # Основной webhook
+
+# Список групп для отслеживания
+groups:
+#  - id: "durov"  # Короткая ссылка или ID группы
+#    name: "Павел Дуров"  # Опционально: имя для логов
+#    discord_channel: ""  # Опционально: отдельный webhook для этой группы
+
+  - id: "235318409"  # ID группы (цифры)
+    name: "vk2discordTest"
+    discord_channel: ""  # Можно указать свой webhook
+
+# Настройки бота
+bot:
+  interval: 30  # Интервал проверки в секундах
+  max_posts_per_check: 3  # Максимальное количество новых постов за проверку
+  log_level: "INFO"  # Уровень логирования: DEBUG, INFO, WARNING, ERROR
+
+# Дополнительные настройки
+options:
+  include_photos: true
+  include_videos: true
+  include_links: true
+  truncate_text: false  # Обрезать длинный текст
+  show_post_link: true
+  language: "ru"  # ru/en
