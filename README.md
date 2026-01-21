@@ -23,6 +23,18 @@ docker-compose logs -f
 #### Команды управления Docker
 
 ```
+# Все контейнеры (работающие и остановленные)
+docker ps -a
+
+# Просмотр логов в реальном времени
+docker-compose logs -f
+
+# Или сохранить логи в файл
+docker-compose logs > logs.txt
+
+# Просмотр логов с фильтром
+docker-compose logs --tail=100 | findstr "ошибка"
+
 # Остановить бота
 docker-compose down
 

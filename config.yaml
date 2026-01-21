@@ -27,7 +27,7 @@ bot:
 # Дополнительные настройки
 options:
   include_photos: true
-  include_videos: true
+  include_videos: false
   include_links: true
   truncate_text: false  # Обрезать длинный текст
   show_post_link: true
