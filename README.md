@@ -9,32 +9,3 @@
 git clone https://github.com/ваш-username/vk2discord-bot.git
 cd vk2discord-bot
 ```
-
-### 2. Запуск бота через Docker Compose
-
-```
-# Собрать и запустить контейнер в фоновом режиме
-docker-compose up -d
-
-# Посмотреть логи (что происходит)
-docker-compose logs -f
-```
-
-#### Команды управления Docker
-
-```
-# Остановить бота
-docker-compose down
-
-# Перезапустить бота
-docker-compose restart
-
-# Обновить бота (после изменений в коде)
-docker-compose up -d --build
-
-# Посмотреть использование ресурсов
-docker stats
-
-# Войти в контейнер (для отладки)
-docker exec -it vk2discord-bot bash
-```
