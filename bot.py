@@ -1,17 +1,12 @@
-#!/usr/bin/env python3
-"""
-VK to Discord Bot для облачного развертывания
-"""
-
 import os
 import sys
 import time
-import signal
 import json
 import yaml
 import logging
 from datetime import datetime
 from typing import Dict, List
+from urllib.parse import urlparse
 
 import vk_api
 import requests
@@ -19,7 +14,7 @@ from dotenv import load_dotenv
 
 # Настройка логирования
 logging.basicConfig(
-    level=os.getenv('LOG_LEVEL', 'INFO'),
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.StreamHandler(sys.stdout)
@@ -29,19 +24,27 @@ logger = logging.getLogger(__name__)
 
 
 class VK2DiscordBot:
-    def __init__(self):
+    def __init__(self, use_proxy: bool = True):
         """Инициализация бота"""
-        # Загрузка конфигурации из переменных окружения
+        load_dotenv()
+
+        # Загрузка конфигурации
+        with open('config.yaml', 'r', encoding='utf-8') as f:
+            self.config = yaml.safe_load(f)
+
+        # Настройки ВК
         self.vk_token = os.getenv('VK_TOKEN')
-        self.discord_webhook = os.getenv('DISCORD_WEBHOOK')
-
         if not self.vk_token:
-            raise ValueError("VK_TOKEN не установлен в переменных окружения")
-        if not self.discord_webhook:
-            raise ValueError("DISCORD_WEBHOOK не установлен в переменных окружения")
+            raise ValueError("VK_TOKEN не найден в .env")
 
-        # Загрузка конфигурации групп
-        self.config = self.load_config()
+        # Настройки Discord
+        self.discord_webhook = os.getenv('DISCORD_WEBHOOK')
+        if not self.discord_webhook:
+            raise ValueError("DISCORD_WEBHOOK не найден в .env")
+
+        # Настройки прокси (если нужно)
+        self.use_proxy = use_proxy
+        self.proxies = self.get_proxies() if use_proxy else {}
 
         # Инициализация VK API
         self.vk_session = vk_api.VkApi(token=self.vk_token)
@@ -49,79 +52,76 @@ class VK2DiscordBot:
 
         # Состояние бота
         self.last_posts = {}
-        self.running = True
 
-        # Обработка сигналов для graceful shutdown
-        signal.signal(signal.SIGTERM, self.handle_shutdown)
-        signal.signal(signal.SIGINT, self.handle_shutdown)
+        logger.info(f"Бот инициализирован. Используем прокси: {use_proxy}")
 
-        logger.info("Бот инициализирован для облачного запуска")
+    def get_proxies(self) -> Dict:
+        """Получение списка прокси для обхода блокировок"""
+        # Бесплатные прокси (могут быть нестабильны)
+        free_proxies = [
+            'http://45.61.187.67:4001',
+            'http://45.61.188.24:4002',
+            'http://45.61.188.15:4003',
+        ]
 
-    def load_config(self):
-        """Загрузка конфигурации"""
-        # Сначала пытаемся загрузить из переменной окружения (для Railway/Fly.io)
-        config_yaml = os.getenv('CONFIG_YAML')
-        if config_yaml:
-            return yaml.safe_load(config_yaml)
-
-        # Затем из файла (для локального запуска)
-        config_paths = ['/app/config.yaml', 'config.yaml', './config.yaml']
-        for path in config_paths:
-            if os.path.exists(path):
-                with open(path, 'r', encoding='utf-8') as f:
-                    return yaml.safe_load(f)
-
-        # Если конфиг не найден, используем минимальную конфигурацию
-        logger.warning("Конфигурационный файл не найден, используем настройки по умолчанию")
         return {
-            'groups': [],
-            'bot': {'interval': 60},
-            'options': {
-                'include_photos': True,
-                'include_videos': True,
-                'include_links': True,
-                'truncate_text': True,
-                'show_post_link': True
-            }
+            'http': free_proxies[0],
+            'https': free_proxies[0]
         }
 
-    def handle_shutdown(self, signum, frame):
-        """Обработка сигнала завершения"""
-        logger.info(f"Получен сигнал завершения {signum}, останавливаем бота...")
-        self.running = False
+    def test_discord_connection(self) -> bool:
+        """Тестирование подключения к Discord"""
+        logger.info("Тестирование подключения к Discord...")
+
+        test_message = {
+            "content": "✅ VK2Discord Bot запущен и работает!",
+            "username": "VK Bot Tester"
+        }
+
+        try:
+            response = requests.post(
+                self.discord_webhook,
+                json=test_message,
+                headers={'Content-Type': 'application/json'},
+                timeout=30,
+                proxies=self.proxies if self.use_proxy else None
+            )
+
+            if response.status_code in [200, 204]:
+                logger.info(f"✅ Discord webhook работает! Статус: {response.status_code}")
+                return True
+            else:
+                logger.error(f"❌ Discord вернул ошибку: {response.status_code} - {response.text}")
+                return False
+
+        except requests.exceptions.Timeout:
+            logger.error("❌ Таймаут при подключении к Discord")
+            return False
+        except Exception as e:
+            logger.error(f"❌ Ошибка подключения к Discord: {e}")
+            return False
 
     def get_group_info(self, group_id: str) -> Dict:
         """Получение информации о группе"""
         try:
-            # Убираем 'vk.com/' если есть в начале
-            if group_id.startswith('vk.com/'):
-                group_id = group_id.replace('vk.com/', '')
+            if isinstance(group_id, str) and not group_id.isdigit():
+                group_info = self.vk.groups.getById(group_id=group_id)
+            else:
+                group_info = self.vk.groups.getById(group_id=int(group_id))
 
-            # Пробуем получить по screen_name
-            try:
-                group_info = self.vk.groups.getById(group_id=group_id, fields='description,photo_200')
-                return group_info[0]
-            except:
-                # Пробуем по ID
-                group_info = self.vk.groups.getById(group_id=int(group_id), fields='description,photo_200')
-                return group_info[0]
+            return group_info[0] if group_info else {}
         except Exception as e:
             logger.error(f"Ошибка получения информации о группе {group_id}: {e}")
             return {}
 
-    def get_last_posts(self, group_id: str, count: int = 5) -> List[Dict]:
+    def get_last_posts(self, group_id: str, count: int = 3) -> List[Dict]:
         """Получение последних постов из группы"""
         try:
-            # Определяем ID группы
-            if isinstance(group_id, str) and not group_id.isdigit():
-                group_info = self.get_group_info(group_id)
-                group_id = f"-{group_info['id']}"
-            else:
-                group_id = f"-{group_id}"
+            group_info = self.get_group_info(group_id)
+            vk_group_id = f"-{group_info['id']}" if group_info else f"-{group_id}"
 
-            # Получаем посты
             posts = self.vk.wall.get(
-                owner_id=group_id,
+                owner_id=vk_group_id,
                 count=count,
                 filter='owner'
             )
@@ -131,166 +131,137 @@ class VK2DiscordBot:
             logger.error(f"Ошибка получения постов из {group_id}: {e}")
             return []
 
-    def format_post(self, post: Dict, group_info: Dict) -> Dict:
-        """Форматирование поста для Discord"""
-        content = f"**📢 Новый пост из [{group_info.get('name', 'Группа')}](https://vk.com/{group_info.get('screen_name', '')})**\n\n"
+    def format_post_simple(self, post: Dict, group_info: Dict) -> Dict:
+        """Упрощенное форматирование поста (без embed)"""
+        text = post.get('text', '')
 
-        if post.get('text'):
-            text = post['text']
-            if len(text) > 1800:
-                text = text[:1800] + "..."
-            content += text + "\n\n"
+        # Обрезаем текст если слишком длинный
+        if len(text) > 1500:
+            text = text[:1500] + "..."
 
-        # Добавляем ссылку на пост
-        post_id = post['id']
-        owner_id = post['owner_id']
-        content += f"[🔗 Ссылка на пост](https://vk.com/wall{owner_id}_{post_id})"
+        # Формируем простой текст
+        post_url = f"https://vk.com/wall{post['owner_id']}_{post['id']}"
+        content = f"**📢 Новый пост из {group_info.get('name', 'Группа')}**\n\n{text}\n\n🔗 {post_url}"
 
-        embed = {
+        return {
             "content": content,
-            "username": group_info.get('name', 'VK Bot')[:32],
-            "embeds": []
+            "username": group_info.get('name', 'VK Bot')[:32]
         }
 
-        # Обработка вложений (только первая картинка)
-        attachments = post.get('attachments', [])
-        for attach in attachments:
-            if attach['type'] == 'photo':
-                photo = attach['photo']
-                sizes = photo.get('sizes', [])
-                if sizes:
-                    # Ищем картинку хорошего качества
-                    for quality in ['z', 'y', 'x', 'w', 'r']:
-                        for size in sizes:
-                            if size['type'] == quality:
-                                embed["embeds"].append({
-                                    "image": {"url": size['url']}
-                                })
-                                return embed
-                    # Если не нашли нужного качества, берем последнюю (обычно самую большую)
-                    embed["embeds"].append({
-                        "image": {"url": sizes[-1]['url']}
-                    })
-                break
-
-        return embed
-
-    def send_to_discord(self, embed: Dict) -> bool:
-        """Отправка сообщения в Discord через webhook"""
-        try:
-            response = requests.post(
-                self.discord_webhook,
-                json=embed,
-                headers={'Content-Type': 'application/json'},
-                timeout=30
-            )
-
-            if response.status_code in [200, 204]:
-                return True
-            else:
-                logger.error(f"Ошибка Discord: {response.status_code}")
-                return False
-
-        except Exception as e:
-            logger.error(f"Ошибка отправки в Discord: {e}")
-            return False
-
-    def check_new_posts(self):
-        """Проверка новых постов"""
-        groups = self.config.get('groups', [])
-
-        for group_config in groups:
-            if not self.running:
-                break
-
-            group_id = group_config['id']
-
+    def send_to_discord_with_retry(self, message: Dict, max_retries: int = 3) -> bool:
+        """Отправка сообщения в Discord с повторными попытками"""
+        for attempt in range(max_retries):
             try:
-                # Получаем информацию о группе
-                group_info = self.get_group_info(group_id)
-                if not group_info:
-                    continue
+                logger.info(f"Попытка {attempt + 1} отправки в Discord...")
 
-                # Получаем последние посты
-                posts = self.get_last_posts(group_id, count=2)
-                if not posts:
-                    continue
+                response = requests.post(
+                    self.discord_webhook,
+                    json=message,
+                    headers={'Content-Type': 'application/json'},
+                    timeout=30,
+                    proxies=self.proxies if self.use_proxy else None
+                )
 
-                # Проверяем последний пост
-                latest_post = posts[0]
-                post_key = f"{group_id}_{latest_post['id']}"
+                if response.status_code in [200, 204]:
+                    logger.info(f"✅ Сообщение отправлено в Discord")
+                    return True
+                else:
+                    logger.warning(f"⚠️ Discord вернул {response.status_code}: {response.text}")
+                    time.sleep(5)
 
-                if post_key not in self.last_posts:
-                    logger.info(f"Найден новый пост: {latest_post['id']} из {group_info.get('name')}")
-
-                    # Форматируем и отправляем
-                    embed = self.format_post(latest_post, group_info)
-
-                    # Отправляем в Discord
-                    if self.send_to_discord(embed):
-                        logger.info(f"Пост {latest_post['id']} отправлен в Discord")
-
-                    # Сохраняем ID поста
-                    self.last_posts[post_key] = datetime.now()
-
-                    # Ограничиваем размер словаря
-                    if len(self.last_posts) > 50:
-                        # Удаляем самые старые записи
-                        oldest = sorted(self.last_posts.items(), key=lambda x: x[1])[:10]
-                        for key, _ in oldest:
-                            del self.last_posts[key]
-
-                time.sleep(1)  # Задержка между группами
-
+            except requests.exceptions.Timeout:
+                logger.warning(f"⚠️ Таймаут при попытке {attempt + 1}")
+                time.sleep(5)
             except Exception as e:
-                logger.error(f"Ошибка обработки группы {group_id}: {e}")
-                time.sleep(2)
+                logger.warning(f"⚠️ Ошибка при попытке {attempt + 1}: {e}")
+                time.sleep(5)
+
+        logger.error(f"❌ Не удалось отправить сообщение после {max_retries} попыток")
+        return False
 
     def run(self):
         """Запуск основного цикла бота"""
-        logger.info("Запуск бота в облаке...")
+        logger.info("=" * 50)
+        logger.info("ЗАПУСК VK2DISCORD BOT")
+        logger.info("=" * 50)
 
-        # Инициализация - получаем текущие посты
+        # Тестируем подключение к Discord
+        if not self.test_discord_connection():
+            logger.warning("Предупреждение: Discord webhook не отвечает. Бот продолжит работу.")
+
+        # Инициализация групп
         groups = self.config.get('groups', [])
         for group_config in groups:
-            if not self.running:
-                break
-
             group_id = group_config['id']
             posts = self.get_last_posts(group_id, count=1)
             if posts:
                 post_key = f"{group_id}_{posts[0]['id']}"
                 self.last_posts[post_key] = datetime.now()
-                logger.info(f"Инициализирована группа {group_id}, последний пост: {posts[0]['id']}")
-            time.sleep(1)
+                logger.info(f"Инициализирована группа: {group_config.get('name', group_id)}")
 
         interval = self.config.get('bot', {}).get('interval', 60)
         logger.info(f"Начинаем проверку с интервалом {interval} секунд")
 
         # Основной цикл
-        while self.running:
+        while True:
             try:
-                self.check_new_posts()
+                for group_config in groups:
+                    group_id = group_config['id']
+                    group_name = group_config.get('name', group_id)
 
-                # Ждем указанный интервал, но проверяем флаг running каждую секунду
-                for _ in range(interval):
-                    if not self.running:
-                        break
-                    time.sleep(1)
+                    logger.info(f"Проверяем группу: {group_name}")
 
+                    posts = self.get_last_posts(group_id, count=2)
+                    if not posts:
+                        continue
+
+                    latest_post = posts[0]
+                    post_key = f"{group_id}_{latest_post['id']}"
+
+                    if post_key not in self.last_posts:
+                        logger.info(f"Найден новый пост: {latest_post['id']}")
+
+                        # Получаем информацию о группе
+                        group_info = self.get_group_info(group_id)
+
+                        # Форматируем пост
+                        discord_message = self.format_post_simple(latest_post, group_info)
+
+                        # Отправляем в Discord
+                        if self.send_to_discord_with_retry(discord_message):
+                            self.last_posts[post_key] = datetime.now()
+                            logger.info(f"✅ Пост {latest_post['id']} успешно опубликован в Discord")
+                        else:
+                            logger.warning(f"⚠️ Пост {latest_post['id']} не был отправлен в Discord")
+
+                    time.sleep(2)
+
+                # Ждем перед следующей проверкой
+                logger.info(f"Ожидание {interval} секунд до следующей проверки...")
+                time.sleep(interval)
+
+            except KeyboardInterrupt:
+                logger.info("Бот остановлен пользователем")
+                break
             except Exception as e:
                 logger.error(f"Ошибка в основном цикле: {e}")
-                if self.running:
-                    time.sleep(30)
+                time.sleep(30)
 
 
 def main():
     """Точка входа"""
     try:
-        bot = VK2DiscordBot()
+        # Сначала пробуем без прокси
+        logger.info("Пробуем запустить без прокси...")
+        bot = VK2DiscordBot(use_proxy=False)
+
+        # Тестируем Discord
+        if not bot.test_discord_connection():
+            logger.warning("Discord недоступен. Пробуем с прокси...")
+            bot = VK2DiscordBot(use_proxy=True)
+
         bot.run()
-    except KeyboardInterrupt:
-        logger.info("Бот остановлен пользователем")
+
     except Exception as e:
         logger.error(f"Критическая ошибка: {e}")
         sys.exit(1)

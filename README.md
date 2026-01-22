@@ -9,3 +9,12 @@
 git clone https://github.com/ваш-username/vk2discord-bot.git
 cd vk2discord-bot
 ```
+
+### 2. Создайте файл ````.env````
+```
+cp .env.example .env
+```
+
+### 3. Заполните ````.env```` своими значениями
+- Получите VK_TOKEN по инструкции в файле
+- Получите DISCORD_WEBHOOK из Discord

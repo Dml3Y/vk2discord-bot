@@ -8,6 +8,13 @@ services:
     environment:
       - VK_TOKEN=${VK_TOKEN}
       - DISCORD_WEBHOOK=${DISCORD_WEBHOOK}
+      - LOG_LEVEL=INFO
+    # Добавляем сетевые настройки
+    network_mode: "bridge"
+    # Настройки DNS для лучшей работы
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
     volumes:
       - ./config.yaml:/app/config.yaml:ro
       - ./data:/app/data
