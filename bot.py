@@ -1,9 +1,3 @@
-#!/usr/bin/env python3
-"""
-VK to Discord Bot
-Автоматическая публикация постов из ВКонтакте в Discord
-"""
-
 import os
 import sys
 import time
