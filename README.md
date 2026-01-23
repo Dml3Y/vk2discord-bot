@@ -24,3 +24,6 @@ cp .env.example .env
 id: "xxxxxxxxx"  # ID группы (цифры)
 name: "xxxxxxxx" # Имя группы
 ```
+
+## Тесты
+

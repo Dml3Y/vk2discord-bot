@@ -132,20 +132,28 @@ class VK2DiscordBot:
             return []
 
     def format_post_simple(self, post: Dict, group_info: Dict) -> Dict:
-        """Упрощенное форматирование поста (без embed)"""
+        logger.info(f"Group info for username: {group_info}")
         text = post.get('text', '')
 
-        # Обрезаем текст если слишком длинный
         if len(text) > 1500:
             text = text[:1500] + "..."
 
-        # Формируем простой текст
         post_url = f"https://vk.com/wall{post['owner_id']}_{post['id']}"
         content = f"**📢 Новый пост из {group_info.get('name', 'Группа')}**\n\n{text}\n\n🔗 {post_url}"
 
+        # Очищаем username от специальных символов и проверяем длину
+        username = group_info.get('name', 'VK Bot')
+        # Удаляем опасные символы
+        username = ''.join(c for c in username if c.isalnum() or c in ' _-')
+        # Проверяем, что username не пустой после очистки
+        if not username.strip():
+            username = 'VK Bot'
+        # Урезаем до 32 символов (ограничение Discord для webhook)
+        username = username[:32].strip()
+
         return {
             "content": content,
-            "username": group_info.get('name', 'VK Bot')[:32]
+            "username": username
         }
 
     def send_to_discord_with_retry(self, message: Dict, max_retries: int = 3) -> bool:
@@ -153,6 +161,7 @@ class VK2DiscordBot:
         for attempt in range(max_retries):
             try:
                 logger.info(f"Попытка {attempt + 1} отправки в Discord...")
+                logger.info(f"Отправляем сообщение: {message.get('username', 'No username')}")
 
                 response = requests.post(
                     self.discord_webhook,
@@ -162,18 +171,20 @@ class VK2DiscordBot:
                     proxies=self.proxies if self.use_proxy else None
                 )
 
+                logger.info(f"Ответ Discord: {response.status_code}")
+
                 if response.status_code in [200, 204]:
                     logger.info(f"✅ Сообщение отправлено в Discord")
                     return True
                 else:
-                    logger.warning(f"⚠️ Discord вернул {response.status_code}: {response.text}")
+                    logger.error(f"❌ Discord вернул ошибку {response.status_code}: {response.text}")
                     time.sleep(5)
 
             except requests.exceptions.Timeout:
-                logger.warning(f"⚠️ Таймаут при попытке {attempt + 1}")
+                logger.error(f"⚠️ Таймаут при попытке {attempt + 1}")
                 time.sleep(5)
             except Exception as e:
-                logger.warning(f"⚠️ Ошибка при попытке {attempt + 1}: {e}")
+                logger.error(f"⚠️ Ошибка при попытке {attempt + 1}: {str(e)}")
                 time.sleep(5)
 
         logger.error(f"❌ Не удалось отправить сообщение после {max_retries} попыток")
