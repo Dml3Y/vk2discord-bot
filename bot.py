@@ -230,8 +230,8 @@ class VK2DiscordBot:
         """Форматирование со скрытыми ссылками на фото"""
         text = post.get('text', '')
 
-        if len(text) > 1500:
-            text = text[:1500] + "..."
+        if len(text) > 1000:
+            text = text[:1000] + "..."
 
         # Получаем фото
         photo_urls = []
