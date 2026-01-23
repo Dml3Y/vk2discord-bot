@@ -83,7 +83,7 @@ class VK2DiscordBot:
                 self.discord_webhook,
                 json=test_message,
                 headers={'Content-Type': 'application/json'},
-                timeout=10,
+                timeout=30,
                 proxies=self.proxies if self.use_proxy else None
             )
 
@@ -131,10 +131,49 @@ class VK2DiscordBot:
             logger.error(f"Ошибка получения постов из {group_id}: {e}")
             return []
 
-    def format_post_combo(self, post: Dict, group_info: Dict) -> Dict:
-        """Комбинированное форматирование"""
+    # def format_post_combo(self, post: Dict, group_info: Dict) -> Dict:
+    #     """Комбинированное форматирование"""
+    #     text = post.get('text', '')
+    #
+    #     if len(text) > 1500:
+    #         text = text[:1500] + "..."
+    #
+    #     # Получаем фото
+    #     photo_urls = []
+    #     if 'attachments' in post:
+    #         for attachment in post['attachments']:
+    #             if attachment.get('type') == 'photo':
+    #                 photo = attachment['photo']
+    #                 sizes = photo.get('sizes', [])
+    #                 if sizes:
+    #                     max_size = sizes[-1]
+    #                     photo_urls.append(max_size['url'])
+    #
+    #     post_url = f"https://vk.com/wall{post['owner_id']}_{post['id']}"
+    #     content = f"**📢 Новый пост из {group_info.get('name', 'Группа')}**\n\n{text}"
+    #
+    #     # Добавляем ссылки на фото
+    #     for i, url in enumerate(photo_urls[:5]):
+    #         content += f"\n\n📸 {url}"
+    #
+    #     content += f"\n\n🔗 {post_url}"
+    #
+    #     # Очищаем username
+    #     username = group_info.get('name', 'VK Bot')
+    #     username = ''.join(c for c in username if c.isalnum() or c in ' _-')
+    #     if not username.strip():
+    #         username = 'VK Bot'
+    #     username = username[:32].strip()
+    #
+    #     return {
+    #         "content": content,
+    #         "username": username
+    #     }
+    def format_post_best(self, post: Dict, group_info: Dict) -> Dict:
+        """Лучший вариант форматирования"""
         text = post.get('text', '')
 
+        # Обрезаем текст если слишком длинный
         if len(text) > 1500:
             text = text[:1500] + "..."
 
@@ -146,29 +185,47 @@ class VK2DiscordBot:
                     photo = attachment['photo']
                     sizes = photo.get('sizes', [])
                     if sizes:
-                        max_size = sizes[-1]
+                        # Ищем размер с максимальным качеством (тип 'w', 'z', 'y')
+                        size_order = ['w', 'z', 'y', 'x', 'r', 'q', 'p', 'o', 'm', 's']
+                        max_size = sizes[-1]  # по умолчанию последний
+                        for size_type in size_order:
+                            for size in sizes:
+                                if size['type'] == size_type:
+                                    max_size = size
+                                    break
+                            else:
+                                continue
+                            break
                         photo_urls.append(max_size['url'])
 
         post_url = f"https://vk.com/wall{post['owner_id']}_{post['id']}"
-        content = f"**📢 Новый пост из {group_info.get('name', 'Группа')}**\n\n{text}"
 
-        # Добавляем ссылки на фото
-        for i, url in enumerate(photo_urls[:5]):
-            content += f"\n\n📸 {url}"
-
-        content += f"\n\n🔗 {post_url}"
-
-        # Очищаем username
-        username = group_info.get('name', 'VK Bot')
-        username = ''.join(c for c in username if c.isalnum() or c in ' _-')
-        if not username.strip():
-            username = 'VK Bot'
-        username = username[:32].strip()
-
-        return {
-            "content": content,
-            "username": username
+        # Создаем основной embed
+        embed = {
+            "title": f"📢 Новый пост из {group_info.get('name', 'Группа')}",
+            "description": text,
+            "url": post_url,
+            "color": 0x0077FF,
+            "timestamp": datetime.fromtimestamp(post.get('date', time.time())).isoformat(),
+            "footer": {
+                "text": group_info.get('name', 'VK')
+            }
         }
+
+        # Добавляем первое фото как image в embed
+        if photo_urls:
+            embed["image"] = {"url": photo_urls[0]}
+
+        message = {
+            "embeds": [embed],
+            "username": group_info.get('name', 'VK Bot')[:32]
+        }
+
+        # Добавляем дополнительную информацию в content если много фото
+        if len(photo_urls) > 1:
+            message["content"] = f"📸 В посте {len(photo_urls)} фото"
+
+        return message
 
     def send_to_discord_with_retry(self, message: Dict, max_retries: int = 3) -> bool:
         """Отправка сообщения в Discord с повторными попытками"""
@@ -181,7 +238,7 @@ class VK2DiscordBot:
                     self.discord_webhook,
                     json=message,
                     headers={'Content-Type': 'application/json'},
-                    timeout=10,
+                    timeout=30,
                     proxies=self.proxies if self.use_proxy else None
                 )
 
@@ -209,10 +266,6 @@ class VK2DiscordBot:
         logger.info("=" * 50)
         logger.info("ЗАПУСК VK2DISCORD BOT")
         logger.info("=" * 50)
-
-        # Тестируем подключение к Discord
-        if not self.test_discord_connection():
-            logger.warning("Предупреждение: Discord webhook не отвечает. Бот продолжит работу.")
 
         # Инициализация групп
         groups = self.config.get('groups', [])
@@ -250,7 +303,7 @@ class VK2DiscordBot:
                         group_info = self.get_group_info(group_id)
 
                         # Форматируем пост
-                        discord_message = self.format_post_combo(latest_post, group_info)
+                        discord_message = self.format_post_best(latest_post, group_info)
 
                         # Отправляем в Discord
                         if self.send_to_discord_with_retry(discord_message):
@@ -270,7 +323,7 @@ class VK2DiscordBot:
                 break
             except Exception as e:
                 logger.error(f"Ошибка в основном цикле: {e}")
-                time.sleep(10)
+                time.sleep(30)
 
 
 def main():
