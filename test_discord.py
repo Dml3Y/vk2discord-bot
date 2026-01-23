@@ -25,16 +25,16 @@ def test_discord():
         print(f"\nТест {i}: {message['content'][:30]}...")
 
         try:
-            # # Без прокси
-            # print("  Без прокси...")
-            # response = requests.post(webhook, json=message, timeout=10)
-            # print(f"    Статус: {response.status_code}")
-
-            # С прокси
-            print("  С прокси...")
-            proxies = {'http': 'http://45.61.187.67:4001', 'https': 'http://45.61.187.67:4001'}
-            response = requests.post(webhook, json=message, timeout=10, proxies=proxies)
+            # Без прокси
+            print("  Без прокси...")
+            response = requests.post(webhook, json=message, timeout=10)
             print(f"    Статус: {response.status_code}")
+
+            # # С прокси
+            # print("  С прокси...")
+            # proxies = {'http': 'http://45.61.187.67:4001', 'https': 'http://45.61.187.67:4001'}
+            # response = requests.post(webhook, json=message, timeout=10, proxies=proxies)
+            # print(f"    Статус: {response.status_code}")
 
         except Exception as e:
             print(f"    Ошибка: {e}")

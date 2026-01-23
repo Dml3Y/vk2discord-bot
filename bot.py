@@ -53,7 +53,7 @@ class VK2DiscordBot:
         # Состояние бота
         self.last_posts = {}
 
-        logger.info(f"Бот инициализирован. Используем прокси: {use_proxy}")
+        # Логирование будет в main()
 
     def get_proxies(self) -> Dict:
         """Получение списка прокси для обхода блокировок"""
@@ -74,7 +74,7 @@ class VK2DiscordBot:
         logger.info("Тестирование подключения к Discord...")
 
         test_message = {
-            "content": "✅ VK2Discord Bot запущен и работает!",
+            "content": "✅ VK2DiscordBot запущен и работает!",
             "username": "VK Bot Tester"
         }
 
@@ -131,24 +131,38 @@ class VK2DiscordBot:
             logger.error(f"Ошибка получения постов из {group_id}: {e}")
             return []
 
-    def format_post_simple(self, post: Dict, group_info: Dict) -> Dict:
-        logger.info(f"Group info for username: {group_info}")
+    def format_post_combo(self, post: Dict, group_info: Dict) -> Dict:
+        """Комбинированное форматирование"""
         text = post.get('text', '')
 
         if len(text) > 1500:
             text = text[:1500] + "..."
 
-        post_url = f"https://vk.com/wall{post['owner_id']}_{post['id']}"
-        content = f"**📢 Новый пост из {group_info.get('name', 'Группа')}**\n\n{text}\n\n🔗 {post_url}"
+        # Получаем фото
+        photo_urls = []
+        if 'attachments' in post:
+            for attachment in post['attachments']:
+                if attachment.get('type') == 'photo':
+                    photo = attachment['photo']
+                    sizes = photo.get('sizes', [])
+                    if sizes:
+                        max_size = sizes[-1]
+                        photo_urls.append(max_size['url'])
 
-        # Очищаем username от специальных символов и проверяем длину
+        post_url = f"https://vk.com/wall{post['owner_id']}_{post['id']}"
+        content = f"**📢 Новый пост из {group_info.get('name', 'Группа')}**\n\n{text}"
+
+        # Добавляем ссылки на фото
+        for i, url in enumerate(photo_urls[:5]):
+            content += f"\n\n📸 {url}"
+
+        content += f"\n\n🔗 {post_url}"
+
+        # Очищаем username
         username = group_info.get('name', 'VK Bot')
-        # Удаляем опасные символы
         username = ''.join(c for c in username if c.isalnum() or c in ' _-')
-        # Проверяем, что username не пустой после очистки
         if not username.strip():
             username = 'VK Bot'
-        # Урезаем до 32 символов (ограничение Discord для webhook)
         username = username[:32].strip()
 
         return {
@@ -236,7 +250,7 @@ class VK2DiscordBot:
                         group_info = self.get_group_info(group_id)
 
                         # Форматируем пост
-                        discord_message = self.format_post_simple(latest_post, group_info)
+                        discord_message = self.format_post_combo(latest_post, group_info)
 
                         # Отправляем в Discord
                         if self.send_to_discord_with_retry(discord_message):
@@ -262,16 +276,32 @@ class VK2DiscordBot:
 def main():
     """Точка входа"""
     try:
+        bot = None
+
         # Сначала пробуем без прокси
         logger.info("Пробуем запустить без прокси...")
-        bot = VK2DiscordBot(use_proxy=False)
+        bot_without_proxy = VK2DiscordBot(use_proxy=False)
 
         # Тестируем Discord
-        if not bot.test_discord_connection():
+        if bot_without_proxy.test_discord_connection():
+            bot = bot_without_proxy
+            logger.info("✅ Бот запущен без прокси")
+        else:
             logger.warning("Discord недоступен. Пробуем с прокси...")
-            bot = VK2DiscordBot(use_proxy=True)
+            bot_with_proxy = VK2DiscordBot(use_proxy=True)
+            if bot_with_proxy.test_discord_connection():
+                bot = bot_with_proxy
+                logger.info("✅ Бот запущен с прокси")
+            else:
+                logger.error(
+                    "Не удалось подключиться к Discord даже с прокси. Бот будет работать, но отправка сообщений может не работать.")
+                bot = bot_with_proxy  # Все равно запускаем, но предупреждаем
 
-        bot.run()
+        if bot:
+            bot.run()
+        else:
+            logger.error("Не удалось инициализировать бота.")
+            sys.exit(1)
 
     except Exception as e:
         logger.error(f"Критическая ошибка: {e}")
