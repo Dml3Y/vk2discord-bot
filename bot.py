@@ -131,12 +131,55 @@ class VK2DiscordBot:
             logger.error(f"Ошибка получения постов из {group_id}: {e}")
             return []
 
-    def format_post_hidden(self, post: Dict, group_info: Dict) -> Dict:
-        """Форматирование со скрытыми ссылками на фото"""
+    # def format_post_hidden(self, post: Dict, group_info: Dict) -> Dict:
+    #     """Форматирование со скрытыми ссылками на фото"""
+    #     text = post.get('text', '')
+    #
+    #     if len(text) > 800:
+    #         text = text[:800] + "..."
+    #
+    #     # Получаем фото
+    #     photo_urls = []
+    #     if 'attachments' in post:
+    #         for attachment in post['attachments']:
+    #             if attachment.get('type') == 'photo':
+    #                 photo = attachment['photo']
+    #                 sizes = photo.get('sizes', [])
+    #                 if sizes:
+    #                     max_size = sizes[-1]
+    #                     photo_urls.append(max_size['url'])
+    #
+    #     post_url = f"https://vk.com/wall{post['owner_id']}_{post['id']}"
+    #     content = f"**📢 Новый пост из {group_info.get('name', 'Группа')}**\n\n{text}"
+    #
+    #     # Добавляем ссылки на фото
+    #     # или просто не добавляем их вообще
+    #     if photo_urls:
+    #         for i, url in enumerate(photo_urls[:3]):  # Ограничиваем 3 фото
+    #             content += f"[`]({url})"
+    #
+    #         # Способ 2: Уведомление о фото без ссылок
+    #         content += f"\n\n📸 В посте {len(photo_urls)} фото"
+    #
+    #     content += f"\n\n🔗 [Ссылка на пост в ВК]({post_url})"
+    #
+    #     # Очищаем username
+    #     username = group_info.get('name', 'VK Bot')
+    #     username = ''.join(c for c in username if c.isalnum() or c in ' _-')
+    #     if not username.strip():
+    #         username = 'VK Bot'
+    #     username = username[:32].strip()
+    #
+    #     return {
+    #         "content": content,
+    #         "username": username
+    #     }
+    def format_post_multiple_embeds(self, post: Dict, group_info: Dict) -> Dict:
+        """Форматирование с несколькими embeds"""
         text = post.get('text', '')
 
-        if len(text) > 800:
-            text = text[:800] + "..."
+        if len(text) > 2000:
+            text = text[:1997] + "..."
 
         # Получаем фото
         photo_urls = []
@@ -150,30 +193,39 @@ class VK2DiscordBot:
                         photo_urls.append(max_size['url'])
 
         post_url = f"https://vk.com/wall{post['owner_id']}_{post['id']}"
-        content = f"**📢 Новый пост из {group_info.get('name', 'Группа')}**\n\n{text}"
 
-        # Добавляем ссылки на фото
-        # или просто не добавляем их вообще
-        if photo_urls:
-            for i, url in enumerate(photo_urls[:3]):  # Ограничиваем 3 фото
-                content += f"\n\n[`]({url})"
+        # Основной embed с текстом
+        embeds = [{
+            "title": f"Новый пост из {group_info.get('name', 'Группа')}",
+            "description": text,
+            "url": post_url,
+            "color": 0x0077FF,
+            "timestamp": datetime.fromtimestamp(post.get('date', time.time())).isoformat(),
+            "footer": {
+                "text": group_info.get('name', 'VK')
+            }
+        }]
 
-            # Способ 2: Уведомление о фото без ссылок
-            content += f"\n\n📸 В посте {len(photo_urls)} фото"
+        # Добавляем embeds для фото (до 9 фото, так как 1 уже занят текстом)
+        for i, photo_url in enumerate(photo_urls[:9]):
+            embeds.append({
+                "image": {"url": photo_url},
+                "color": 0x0077FF
+            })
 
-        content += f"\n\n🔗 [Ссылка на пост в ВК]({post_url})"
+        # Если фото больше 9, показываем количество
+        if len(photo_urls) > 9:
+            embeds.append({
+                "description": f"📸 ...и еще {len(photo_urls) - 9} фото",
+                "color": 0x0077FF
+            })
 
-        # Очищаем username
-        username = group_info.get('name', 'VK Bot')
-        username = ''.join(c for c in username if c.isalnum() or c in ' _-')
-        if not username.strip():
-            username = 'VK Bot'
-        username = username[:32].strip()
-
-        return {
-            "content": content,
-            "username": username
+        message = {
+            "embeds": embeds,
+            "username": group_info.get('name', 'VK Bot')[:32]
         }
+
+        return message
 
     def send_to_discord_with_retry(self, message: Dict, max_retries: int = 3) -> bool:
         """Отправка сообщения в Discord с повторными попытками"""
@@ -251,7 +303,8 @@ class VK2DiscordBot:
                         group_info = self.get_group_info(group_id)
 
                         # Форматируем пост
-                        discord_message = self.format_post_hidden(latest_post, group_info)
+                        # discord_message = self.format_post_hidden(latest_post, group_info)
+                        discord_message = self.format_post_multiple_embeds(latest_post, group_info)
 
                         # Отправляем в Discord
                         if self.send_to_discord_with_retry(discord_message):
