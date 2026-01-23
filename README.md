@@ -18,3 +18,9 @@ cp .env.example .env
 ### 3. Заполните ````.env```` своими значениями
 - Получите VK_TOKEN по инструкции в файле
 - Получите DISCORD_WEBHOOK из Discord
+
+### 4. Заполните ````config.yaml```` своими значениями в groups
+```
+id: "xxxxxxxxx"  # ID группы (цифры)
+name: "xxxxxxxx" # Имя группы
+```

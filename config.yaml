@@ -15,7 +15,7 @@ groups:
 #    discord_channel: ""  # Опционально: отдельный webhook для этой группы
 
   - id: "235318409"  # ID группы (цифры)
-    name: "vk2discordTest"
+    name: "vk2discordTest" # Имя группы
     discord_channel: ""  # Можно указать свой webhook
 
 # Настройки бота
@@ -27,7 +27,7 @@ bot:
 # Дополнительные настройки
 options:
   include_photos: true
-  include_videos: false
+  include_videos: true
   include_links: true
   truncate_text: false  # Обрезать длинный текст
   show_post_link: true
