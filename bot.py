@@ -131,49 +131,16 @@ class VK2DiscordBot:
             logger.error(f"Ошибка получения постов из {group_id}: {e}")
             return []
 
-    # def format_post_hidden(self, post: Dict, group_info: Dict) -> Dict:
-    #     """Форматирование со скрытыми ссылками на фото"""
-    #     text = post.get('text', '')
-    #
-    #     if len(text) > 800:
-    #         text = text[:800] + "..."
-    #
-    #     # Получаем фото
-    #     photo_urls = []
-    #     if 'attachments' in post:
-    #         for attachment in post['attachments']:
-    #             if attachment.get('type') == 'photo':
-    #                 photo = attachment['photo']
-    #                 sizes = photo.get('sizes', [])
-    #                 if sizes:
-    #                     max_size = sizes[-1]
-    #                     photo_urls.append(max_size['url'])
-    #
-    #     post_url = f"https://vk.com/wall{post['owner_id']}_{post['id']}"
-    #     content = f"**📢 Новый пост из {group_info.get('name', 'Группа')}**\n\n{text}"
-    #
-    #     # Добавляем ссылки на фото
-    #     # или просто не добавляем их вообще
-    #     if photo_urls:
-    #         for i, url in enumerate(photo_urls[:3]):  # Ограничиваем 3 фото
-    #             content += f"[`]({url})"
-    #
-    #         # Способ 2: Уведомление о фото без ссылок
-    #         content += f"\n\n📸 В посте {len(photo_urls)} фото"
-    #
-    #     content += f"\n\n🔗 [Ссылка на пост в ВК]({post_url})"
-    #
-    #     # Очищаем username
-    #     username = group_info.get('name', 'VK Bot')
-    #     username = ''.join(c for c in username if c.isalnum() or c in ' _-')
-    #     if not username.strip():
-    #         username = 'VK Bot'
-    #     username = username[:32].strip()
-    #
-    #     return {
-    #         "content": content,
-    #         "username": username
-    #     }
+    def contains_video_emoji(self, post: Dict) -> bool:
+        """Проверяет, содержит ли пост видео-эмодзи"""
+        video_emojis = ['🎥', '📽️']
+        text = post.get('text', '')
+
+        for emoji in video_emojis:
+            if emoji in text:
+                return True
+        return False
+
     def format_post_multiple_embeds(self, post: Dict, group_info: Dict) -> Dict:
         """Форматирование с несколькими embeds"""
         text = post.get('text', '')
@@ -199,7 +166,7 @@ class VK2DiscordBot:
             "title": f"Новый пост из {group_info.get('name', 'Группа')}",
             "description": text,
             "url": post_url,
-            "color": 0x0077FF,
+            "color": 0xc4400f,
             "timestamp": datetime.fromtimestamp(post.get('date', time.time())).isoformat(),
             "footer": {
                 "text": group_info.get('name', 'VK')
@@ -210,14 +177,14 @@ class VK2DiscordBot:
         for i, photo_url in enumerate(photo_urls[:9]):
             embeds.append({
                 "image": {"url": photo_url},
-                "color": 0x0077FF
+                "color": 0xc4400f
             })
 
         # Если фото больше 9, показываем количество
         if len(photo_urls) > 9:
             embeds.append({
                 "description": f"📸 ...и еще {len(photo_urls) - 9} фото",
-                "color": 0x0077FF
+                "color": 0xc4400f
             })
 
         message = {
@@ -299,11 +266,17 @@ class VK2DiscordBot:
                     if post_key not in self.last_posts:
                         logger.info(f"Найден новый пост: {latest_post['id']}")
 
+                        # Проверяем, содержит ли пост эмодзи 🎥
+                        if self.contains_video_emoji(latest_post):
+                            logger.info(f"⏭️ Пропускаем видео-пост с эмодзи 🎥 (ID: {latest_post['id']})")
+                            # Добавляем пост в отслеживаемые, чтобы не обрабатывать его снова
+                            self.last_posts[post_key] = datetime.now()
+                            continue  # Пропускаем отправку этого поста
+
                         # Получаем информацию о группе
                         group_info = self.get_group_info(group_id)
 
                         # Форматируем пост
-                        # discord_message = self.format_post_hidden(latest_post, group_info)
                         discord_message = self.format_post_multiple_embeds(latest_post, group_info)
 
                         # Отправляем в Discord
