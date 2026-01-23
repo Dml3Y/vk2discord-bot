@@ -26,4 +26,11 @@ name: "xxxxxxxx" # Имя группы
 ```
 
 ## Тесты
-
+- Проверка конфигурации
+```
+python test_config.py
+```
+- Проверка вебхука дискорда
+```
+python test_discord.py
+```

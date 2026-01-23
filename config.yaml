@@ -15,12 +15,12 @@ groups:
 #    discord_channel: ""  # Опционально: отдельный webhook для этой группы
 
   - id: "235318409"  # ID группы (цифры)
-    name: "vk2discordTest" # Имя группы
+    name: "vk2disTest" # Имя группы
     discord_channel: ""  # Можно указать свой webhook
 
 # Настройки бота
 bot:
-  interval: 30  # Интервал проверки в секундах
+  interval: 10  # Интервал проверки в секундах
   max_posts_per_check: 3  # Максимальное количество новых постов за проверку
   log_level: "INFO"  # Уровень логирования: DEBUG, INFO, WARNING, ERROR
 

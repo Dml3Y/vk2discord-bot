@@ -83,7 +83,7 @@ class VK2DiscordBot:
                 self.discord_webhook,
                 json=test_message,
                 headers={'Content-Type': 'application/json'},
-                timeout=30,
+                timeout=10,
                 proxies=self.proxies if self.use_proxy else None
             )
 
@@ -167,7 +167,7 @@ class VK2DiscordBot:
                     self.discord_webhook,
                     json=message,
                     headers={'Content-Type': 'application/json'},
-                    timeout=30,
+                    timeout=10,
                     proxies=self.proxies if self.use_proxy else None
                 )
 
@@ -256,7 +256,7 @@ class VK2DiscordBot:
                 break
             except Exception as e:
                 logger.error(f"Ошибка в основном цикле: {e}")
-                time.sleep(30)
+                time.sleep(10)
 
 
 def main():
