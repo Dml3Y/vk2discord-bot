@@ -213,7 +213,7 @@ class VK2DiscordBot:
         embed_title = "📅 Race Day Post" if is_calendar_post else "📝 New Post"
 
         embeds = [{
-            "title": f"{embed_title} из {group_info.get('name', 'Group')}",
+            "title": f"{embed_title} from {group_info.get('name', 'Group')}",
             "description": text,
             "url": post_url,
             "color": 0x0099ff if is_calendar_post else 0xc4400f,
