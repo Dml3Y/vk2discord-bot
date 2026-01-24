@@ -39,15 +39,21 @@ class VK2DiscordBot:
 
         # Настройки Discord - ДВА вебхука
         self.discord_webhook = os.getenv('DISCORD_WEBHOOK')  # Для обычных постов
-        self.discord_thread_webhook = os.getenv('DISCORD_THREAD_WEBHOOK')  # Для постов с 🗓
+        self.discord_thread_webhook_base = os.getenv('DISCORD_THREAD_WEBHOOK')  # Для постов с 🗓 (без параметров)
+        self.thread_id = os.getenv('DISCORD_THREAD_ID')  # ID треда для форум-канала
 
         if not self.discord_webhook:
             raise ValueError("DISCORD_WEBHOOK не найден в .env")
-        if not self.discord_thread_webhook:
+        if not self.discord_thread_webhook_base:
             raise ValueError("DISCORD_THREAD_WEBHOOK не найден в .env")
 
-        # Настройки треда для календарных постов
-        self.thread_id = os.getenv('DISCORD_THREAD_ID')
+        # Формируем URL вебхука для треда с thread_id
+        if self.thread_id:
+            self.discord_thread_webhook = f"{self.discord_thread_webhook_base}?thread_id={self.thread_id}"
+            logger.info(f"Webhook для треда сформирован с thread_id: {self.thread_id}")
+        else:
+            self.discord_thread_webhook = self.discord_thread_webhook_base
+            logger.warning("DISCORD_THREAD_ID не указан. Календарные посты могут не отправляться.")
 
         # Настройки прокси (если нужно)
         self.use_proxy = use_proxy
@@ -111,13 +117,9 @@ class VK2DiscordBot:
             "username": "VK Calendar Bot"
         }
 
-        # Добавляем thread_id если указан
-        if self.thread_id:
-            test_message_thread["thread_id"] = self.thread_id
-
         try:
             response = requests.post(
-                self.discord_thread_webhook,
+                self.discord_thread_webhook,  # Используем уже сформированный URL с thread_id
                 json=test_message_thread,
                 headers={'Content-Type': 'application/json'},
                 timeout=30,
@@ -126,6 +128,8 @@ class VK2DiscordBot:
 
             if response.status_code in [200, 204]:
                 logger.info(f"✅ Вебхук для треда работает! Статус: {response.status_code}")
+                if self.thread_id:
+                    logger.info(f"📌 Thread ID: {self.thread_id}")
             else:
                 logger.error(f"❌ Вебхук для треда вернул ошибку: {response.status_code} - {response.text}")
                 success = False
@@ -212,7 +216,7 @@ class VK2DiscordBot:
             "title": f"{embed_title} из {group_info.get('name', 'Group')}",
             "description": text,
             "url": post_url,
-            "color": 0x0099ff if is_calendar_post else 0xc4400f,  # Синий для календаря, оранжевый для обычных
+            "color": 0x0099ff if is_calendar_post else 0xc4400f,
             "timestamp": datetime.fromtimestamp(post.get('date', time.time())).isoformat(),
             "footer": {
                 "text": group_info.get('name', 'VK')
@@ -238,10 +242,6 @@ class VK2DiscordBot:
             "username": group_info.get('name', 'VK Bot')[:32]
         }
 
-        # Добавляем thread_id только для календарных постов
-        if is_calendar_post and self.thread_id:
-            message["thread_id"] = self.thread_id
-
         return message
 
     def send_to_discord_with_retry(self, message: Dict, is_calendar_post: bool = False, max_retries: int = 3) -> bool:
@@ -250,10 +250,11 @@ class VK2DiscordBot:
         webhook_url = self.discord_thread_webhook if is_calendar_post else self.discord_webhook
         post_type = "календарный" if is_calendar_post else "обычный"
 
+        logger.info(f"Отправляем {post_type} пост. Вебхук: {webhook_url[:80]}...")
+
         for attempt in range(max_retries):
             try:
                 logger.info(f"Попытка {attempt + 1} отправки {post_type} поста в Discord...")
-                logger.info(f"Используем вебхук: {webhook_url[:50]}...")
                 logger.info(f"Отправляем сообщение: {message.get('username', 'No username')}")
 
                 response = requests.post(
@@ -289,9 +290,7 @@ class VK2DiscordBot:
         logger.info("ЗАПУСК VK2DISCORD BOT (с разделением постов)")
         logger.info("=" * 50)
         logger.info(f"Обычные посты: {self.discord_webhook[:50]}...")
-        logger.info(f"Календарные посты: {self.discord_thread_webhook[:50]}...")
-        if self.thread_id:
-            logger.info(f"Thread ID для календарных постов: {self.thread_id}")
+        logger.info(f"Календарные посты: {self.discord_thread_webhook[:80]}...")
 
         # Инициализация групп
         groups = self.config.get('groups', [])
