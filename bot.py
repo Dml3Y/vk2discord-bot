@@ -5,7 +5,7 @@ import json
 import yaml
 import logging
 from datetime import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 from urllib.parse import urlparse
 
 import vk_api
@@ -37,14 +37,17 @@ class VK2DiscordBot:
         if not self.vk_token:
             raise ValueError("VK_TOKEN не найден в .env")
 
-        # Настройки Discord
-        self.discord_webhook = os.getenv('DISCORD_WEBHOOK')
+        # Настройки Discord - ДВА вебхука
+        self.discord_webhook = os.getenv('DISCORD_WEBHOOK')  # Для обычных постов
+        self.discord_thread_webhook = os.getenv('DISCORD_THREAD_WEBHOOK')  # Для постов с 🗓
+
         if not self.discord_webhook:
             raise ValueError("DISCORD_WEBHOOK не найден в .env")
+        if not self.discord_thread_webhook:
+            raise ValueError("DISCORD_THREAD_WEBHOOK не найден в .env")
 
-        # Настройки треда
-        self.thread_name = self.config.get('discord', {}).get('thread_name', 'VK News')
-        self.thread_id = os.getenv('DISCORD_THREAD_ID')  # опционально, если хотите использовать существующий тред
+        # Настройки треда для календарных постов
+        self.thread_id = os.getenv('DISCORD_THREAD_ID')
 
         # Настройки прокси (если нужно)
         self.use_proxy = use_proxy
@@ -57,11 +60,8 @@ class VK2DiscordBot:
         # Состояние бота
         self.last_posts = {}
 
-        # Логирование будет в main()
-
     def get_proxies(self) -> Dict:
         """Получение списка прокси для обхода блокировок"""
-        # Бесплатные прокси (могут быть нестабильны)
         free_proxies = [
             'http://45.61.187.67:4001',
             'http://45.61.188.24:4002',
@@ -74,43 +74,66 @@ class VK2DiscordBot:
         }
 
     def test_discord_connection(self) -> bool:
-        """Тестирование подключения к Discord"""
+        """Тестирование подключения к Discord для обоих вебхуков"""
         logger.info("Тестирование подключения к Discord...")
 
-        test_message = {
-            "content": "✅ VK2DiscordBot запущен и работает!",
+        success = True
+
+        # Тестируем основной вебхук
+        logger.info("Тестируем основной вебхук для обычных постов...")
+        test_message_normal = {
+            "content": "✅ Основной вебхук работает! Обычные посты будут здесь.",
             "username": "VK Bot Tester"
         }
-
-        # Если указан thread_id, добавляем его
-        if self.thread_id:
-            test_message["thread_id"] = self.thread_id
-        # Иначе используем thread_name для создания треда
-        elif self.thread_name:
-            test_message["thread_name"] = self.thread_name
 
         try:
             response = requests.post(
                 self.discord_webhook,
-                json=test_message,
+                json=test_message_normal,
                 headers={'Content-Type': 'application/json'},
                 timeout=30,
                 proxies=self.proxies if self.use_proxy else None
             )
 
             if response.status_code in [200, 204]:
-                logger.info(f"✅ Discord webhook работает! Статус: {response.status_code}")
-                return True
+                logger.info(f"✅ Основной вебхук работает! Статус: {response.status_code}")
             else:
-                logger.error(f"❌ Discord вернул ошибку: {response.status_code} - {response.text}")
-                return False
-
-        except requests.exceptions.Timeout:
-            logger.error("❌ Таймаут при подключении к Discord")
-            return False
+                logger.error(f"❌ Основной вебхук вернул ошибку: {response.status_code} - {response.text}")
+                success = False
         except Exception as e:
-            logger.error(f"❌ Ошибка подключения к Discord: {e}")
-            return False
+            logger.error(f"❌ Ошибка подключения к основному вебхуку: {e}")
+            success = False
+
+        # Тестируем вебхук для треда
+        logger.info("Тестируем вебхук для постов с 🗓...")
+        test_message_thread = {
+            "content": "✅ Вебхук для постов с 🗓 работает! Календарные посты будут здесь.",
+            "username": "VK Calendar Bot"
+        }
+
+        # Добавляем thread_id если указан
+        if self.thread_id:
+            test_message_thread["thread_id"] = self.thread_id
+
+        try:
+            response = requests.post(
+                self.discord_thread_webhook,
+                json=test_message_thread,
+                headers={'Content-Type': 'application/json'},
+                timeout=30,
+                proxies=self.proxies if self.use_proxy else None
+            )
+
+            if response.status_code in [200, 204]:
+                logger.info(f"✅ Вебхук для треда работает! Статус: {response.status_code}")
+            else:
+                logger.error(f"❌ Вебхук для треда вернул ошибку: {response.status_code} - {response.text}")
+                success = False
+        except Exception as e:
+            logger.error(f"❌ Ошибка подключения к вебхуку для треда: {e}")
+            success = False
+
+        return success
 
     def get_group_info(self, group_id: str) -> Dict:
         """Получение информации о группе"""
@@ -152,7 +175,17 @@ class VK2DiscordBot:
                 return True
         return False
 
-    def format_post_multiple_embeds(self, post: Dict, group_info: Dict) -> Dict:
+    def contains_calendar_emoji(self, post: Dict) -> bool:
+        """Проверяет, содержит ли пост календарный эмодзи"""
+        calendar_emojis = ['🗓️', '📅', '🗓']
+        text = post.get('text', '')
+
+        for emoji in calendar_emojis:
+            if emoji in text:
+                return True
+        return False
+
+    def format_post_multiple_embeds(self, post: Dict, group_info: Dict, is_calendar_post: bool = False) -> Dict:
         """Форматирование с несколькими embeds"""
         text = post.get('text', '')
 
@@ -173,29 +206,31 @@ class VK2DiscordBot:
         post_url = f"https://vk.com/wall{post['owner_id']}_{post['id']}"
 
         # Основной embed с текстом
+        embed_title = "📅 Race Day Post" if is_calendar_post else "📝 New Post"
+
         embeds = [{
-            "title": f"Новый пост из {group_info.get('name', 'Группа')}",
+            "title": f"{embed_title} из {group_info.get('name', 'Group')}",
             "description": text,
             "url": post_url,
-            "color": 0xc4400f,
+            "color": 0x0099ff if is_calendar_post else 0xc4400f,  # Синий для календаря, оранжевый для обычных
             "timestamp": datetime.fromtimestamp(post.get('date', time.time())).isoformat(),
             "footer": {
                 "text": group_info.get('name', 'VK')
             }
         }]
 
-        # Добавляем embeds для фото (до 9 фото, так как 1 уже занят текстом)
+        # Добавляем embeds для фото
         for i, photo_url in enumerate(photo_urls[:9]):
             embeds.append({
                 "image": {"url": photo_url},
-                "color": 0xc4400f
+                "color": 0x0099ff if is_calendar_post else 0xc4400f
             })
 
         # Если фото больше 9, показываем количество
         if len(photo_urls) > 9:
             embeds.append({
                 "description": f"📸 ...и еще {len(photo_urls) - 9} фото",
-                "color": 0xc4400f
+                "color": 0x0099ff if is_calendar_post else 0xc4400f
             })
 
         message = {
@@ -203,23 +238,26 @@ class VK2DiscordBot:
             "username": group_info.get('name', 'VK Bot')[:32]
         }
 
-        # Добавляем thread_name для форум-канала
-        if self.thread_name and not self.thread_id:
-            message["thread_name"] = self.thread_name
-        elif self.thread_id:
+        # Добавляем thread_id только для календарных постов
+        if is_calendar_post and self.thread_id:
             message["thread_id"] = self.thread_id
 
         return message
 
-    def send_to_discord_with_retry(self, message: Dict, max_retries: int = 3) -> bool:
+    def send_to_discord_with_retry(self, message: Dict, is_calendar_post: bool = False, max_retries: int = 3) -> bool:
         """Отправка сообщения в Discord с повторными попытками"""
+        # Выбираем правильный вебхук
+        webhook_url = self.discord_thread_webhook if is_calendar_post else self.discord_webhook
+        post_type = "календарный" if is_calendar_post else "обычный"
+
         for attempt in range(max_retries):
             try:
-                logger.info(f"Попытка {attempt + 1} отправки в Discord...")
+                logger.info(f"Попытка {attempt + 1} отправки {post_type} поста в Discord...")
+                logger.info(f"Используем вебхук: {webhook_url[:50]}...")
                 logger.info(f"Отправляем сообщение: {message.get('username', 'No username')}")
 
                 response = requests.post(
-                    self.discord_webhook,
+                    webhook_url,
                     json=message,
                     headers={'Content-Type': 'application/json'},
                     timeout=30,
@@ -229,27 +267,31 @@ class VK2DiscordBot:
                 logger.info(f"Ответ Discord: {response.status_code}")
 
                 if response.status_code in [200, 204]:
-                    logger.info(f"✅ Сообщение отправлено в Discord")
+                    logger.info(f"✅ {post_type.capitalize()} пост отправлен в Discord")
                     return True
                 else:
                     logger.error(f"❌ Discord вернул ошибку {response.status_code}: {response.text}")
                     time.sleep(5)
 
             except requests.exceptions.Timeout:
-                logger.error(f"⚠️ Таймаут при попытке {attempt + 1}")
+                logger.error(f"⚠️ Таймаут при попытке {attempt + 1} отправки {post_type} поста")
                 time.sleep(5)
             except Exception as e:
-                logger.error(f"⚠️ Ошибка при попытке {attempt + 1}: {str(e)}")
+                logger.error(f"⚠️ Ошибка при попытке {attempt + 1} отправки {post_type} поста: {str(e)}")
                 time.sleep(5)
 
-        logger.error(f"❌ Не удалось отправить сообщение после {max_retries} попыток")
+        logger.error(f"❌ Не удалось отправить {post_type} пост после {max_retries} попыток")
         return False
 
     def run(self):
         """Запуск основного цикла бота"""
         logger.info("=" * 50)
-        logger.info("ЗАПУСК VK2DISCORD BOT")
+        logger.info("ЗАПУСК VK2DISCORD BOT (с разделением постов)")
         logger.info("=" * 50)
+        logger.info(f"Обычные посты: {self.discord_webhook[:50]}...")
+        logger.info(f"Календарные посты: {self.discord_thread_webhook[:50]}...")
+        if self.thread_id:
+            logger.info(f"Thread ID для календарных постов: {self.thread_id}")
 
         # Инициализация групп
         groups = self.config.get('groups', [])
@@ -286,22 +328,33 @@ class VK2DiscordBot:
                         # Проверяем, содержит ли пост эмодзи 🎥
                         if self.contains_video_emoji(latest_post):
                             logger.info(f"⏭️ Пропускаем видео-пост с эмодзи 🎥 (ID: {latest_post['id']})")
-                            # Добавляем пост в отслеживаемые, чтобы не обрабатывать его снова
                             self.last_posts[post_key] = datetime.now()
-                            continue  # Пропускаем отправку этого поста
+                            continue
+
+                        # Проверяем, содержит ли пост эмодзи 🗓
+                        is_calendar_post = self.contains_calendar_emoji(latest_post)
+
+                        if is_calendar_post:
+                            logger.info(f"📅 Обнаружен календарный пост с эмодзи 🗓 (ID: {latest_post['id']})")
+                        else:
+                            logger.info(f"📝 Обнаружен обычный пост (ID: {latest_post['id']})")
 
                         # Получаем информацию о группе
                         group_info = self.get_group_info(group_id)
 
                         # Форматируем пост
-                        discord_message = self.format_post_multiple_embeds(latest_post, group_info)
+                        discord_message = self.format_post_multiple_embeds(latest_post, group_info, is_calendar_post)
 
                         # Отправляем в Discord
-                        if self.send_to_discord_with_retry(discord_message):
+                        if self.send_to_discord_with_retry(discord_message, is_calendar_post):
                             self.last_posts[post_key] = datetime.now()
-                            logger.info(f"✅ Пост {latest_post['id']} успешно опубликован в Discord")
+                            post_type = "календарный" if is_calendar_post else "обычный"
+                            logger.info(
+                                f"✅ {post_type.capitalize()} пост {latest_post['id']} успешно опубликован в Discord")
                         else:
-                            logger.warning(f"⚠️ Пост {latest_post['id']} не был отправлен в Discord")
+                            post_type = "календарный" if is_calendar_post else "обычный"
+                            logger.warning(
+                                f"⚠️ {post_type.capitalize()} пост {latest_post['id']} не был отправлен в Discord")
 
                     time.sleep(2)
 
@@ -326,7 +379,7 @@ def main():
         logger.info("Пробуем запустить без прокси...")
         bot_without_proxy = VK2DiscordBot(use_proxy=False)
 
-        # Тестируем Discord
+        # Тестируем Discord подключения
         if bot_without_proxy.test_discord_connection():
             bot = bot_without_proxy
             logger.info("✅ Бот запущен без прокси")

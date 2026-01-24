@@ -12,6 +12,7 @@ print("=" * 50)
 print("\n🔍 Проверка .env файла:")
 vk_token = os.getenv('VK_TOKEN')
 discord_webhook = os.getenv('DISCORD_WEBHOOK')
+thread_id = os.getenv('DISCORD_THREAD_ID')
 
 if vk_token:
     print(f"✅ VK_TOKEN: {vk_token[:20]}...")
@@ -22,6 +23,11 @@ if discord_webhook:
     print(f"✅ DISCORD_WEBHOOK: {discord_webhook[:50]}...")
 else:
     print("❌ DISCORD_WEBHOOK не найден")
+
+if thread_id:
+    print(f"✅ DISCORD_THREAD_ID: {thread_id[:50]}...")
+else:
+    print("❌ DISCORD_THREAD_ID не найден")
 
 # Проверка config.yaml
 print("\n🔍 Проверка config.yaml файла:")
@@ -45,6 +51,8 @@ print("\n" + "=" * 50)
 print("РЕКОМЕНДАЦИИ:")
 if not vk_token:
     print("1. Получите токен ВК по инструкции")
+if not discord_webhook:
+    print("2. Создайте Discord webhook")
 if not discord_webhook:
     print("2. Создайте Discord webhook")
 if not groups:
