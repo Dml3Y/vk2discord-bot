@@ -7,6 +7,7 @@ vk:
 # Настройки Discord
 discord:
   webhook: ${DISCORD_WEBHOOK}  # Основной webhook
+  thread_id: ${DISCORD_THREAD_ID}  # Айди существующего треда для форум-канала
 
 # Список групп для отслеживания
 groups:

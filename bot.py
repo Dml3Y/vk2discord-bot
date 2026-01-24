@@ -42,6 +42,10 @@ class VK2DiscordBot:
         if not self.discord_webhook:
             raise ValueError("DISCORD_WEBHOOK не найден в .env")
 
+        # Настройки треда
+        self.thread_name = self.config.get('discord', {}).get('thread_name', 'VK News')
+        self.thread_id = os.getenv('DISCORD_THREAD_ID')  # опционально, если хотите использовать существующий тред
+
         # Настройки прокси (если нужно)
         self.use_proxy = use_proxy
         self.proxies = self.get_proxies() if use_proxy else {}
@@ -77,6 +81,13 @@ class VK2DiscordBot:
             "content": "✅ VK2DiscordBot запущен и работает!",
             "username": "VK Bot Tester"
         }
+
+        # Если указан thread_id, добавляем его
+        if self.thread_id:
+            test_message["thread_id"] = self.thread_id
+        # Иначе используем thread_name для создания треда
+        elif self.thread_name:
+            test_message["thread_name"] = self.thread_name
 
         try:
             response = requests.post(
@@ -191,6 +202,12 @@ class VK2DiscordBot:
             "embeds": embeds,
             "username": group_info.get('name', 'VK Bot')[:32]
         }
+
+        # Добавляем thread_name для форум-канала
+        if self.thread_name and not self.thread_id:
+            message["thread_name"] = self.thread_name
+        elif self.thread_id:
+            message["thread_id"] = self.thread_id
 
         return message
 
