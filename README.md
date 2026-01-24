@@ -26,12 +26,10 @@
 ### 2. Подготовка VK
 
 1. **Создайте группу VK** или используйте существующую
-2. **Получите токен VK** с правами `wall`, `groups`
-3. **Добавьте бота в группу** как администратора
-
+2. **В строке после ```access_token=``` получите [пользовательский токен VK](https://oauth.vk.com/authorize?client_id=2685278&display=page&redirect_uri=https://oauth.vk.com/blank.html&scope=wall,groups,offline&response_type=token&v=5.199)**
 ### 3. Развертывание на Railway
 
-[![Deploy on Railway](https://railway.app/button.svg)](https://railway.app/template?template=https://github.com/yourusername/vk2discord-bot)
+[![Deploy on Railway](https://railway.app/button.svg)](https://railway.com?referralCode=WEmXt3)
 
 Или вручную:
 
@@ -53,7 +51,7 @@ railway init
 railway variables set VK_TOKEN=ваш_токен_vk
 railway variables set DISCORD_WEBHOOK=ваш_вебхук_обычный
 railway variables set DISCORD_THREAD_WEBHOOK=ваш_вебхук_форум
-railway variables set DISCORD_THREAD_ID=айди_треда  # опционально
+railway variables set DISCORD_THREAD_ID=айди_треда
 
 # Разверните проект
 railway up
