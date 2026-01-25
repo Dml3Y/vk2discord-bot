@@ -152,21 +152,39 @@ class VK2DiscordBot:
             logger.error(f"Ошибка получения информации о группе {group_id}: {e}")
             return {}
 
-    def get_last_posts(self, group_id: str, count: int = 3) -> List[Dict]:
-        """Получение последних постов из группы"""
+    def get_last_posts(self, group_id: str, count: int = 10) -> List[Dict]:
+        """Получение последних постов из группы с отладкой"""
         try:
+            logger.info(f"🔄 Получение постов для группы {group_id}")
+
             group_info = self.get_group_info(group_id)
             vk_group_id = f"-{group_info['id']}" if group_info else f"-{group_id}"
 
+            logger.info(f"📊 VK ID группы: {vk_group_id}")
+            logger.info(f"🎯 Используем filter='all' (все посты)")
+
+            # Получаем посты
             posts = self.vk.wall.get(
                 owner_id=vk_group_id,
                 count=count,
-                filter='owner'
+                filter='all',  # ВСЕ посты
+                extended=0
             )
 
+            logger.info(f"✅ Получено {len(posts['items'])} постов")
+
+            # Логируем информацию о каждом посте
+            for i, post in enumerate(posts['items'], 1):
+                from_id = post['from_id']
+                post_type = "🏢 От группы" if from_id < 0 else f"👤 От пользователя (ID: {from_id})"
+                logger.info(f"   {i}. Пост {post['id']}: {post_type}")
+                if post.get('text'):
+                    logger.info(f"      Текст: {post['text'][:100]}...")
+
             return posts['items']
+
         except Exception as e:
-            logger.error(f"Ошибка получения постов из {group_id}: {e}")
+            logger.error(f"❌ Ошибка получения постов из {group_id}: {e}")
             return []
 
     def contains_video_emoji(self, post: Dict) -> bool:

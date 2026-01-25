@@ -55,8 +55,8 @@ def test_group_access(token, group_id):
 
 
 # Замените на ваши данные
-YOUR_TOKEN = "xxx"
-GROUP_ID = "xxx"  # ID группы (только цифры)
-YOUR_VK_ID = "xxx"  # Можно получить через vk.users.get()[0]['id']
+YOUR_TOKEN = "vk1.a.M0wEsGoVi_aFoSMM8tDo_d1udD6tom0Kh-AvjDrJYKVjKIkaT2OHd67xTXysB9N5hAVnR_znW4SXeMX5R4ZC3Q5OI9HVdeJEainzJUXy_bLvegeGzXrkv6aiKPJdQ95bHPnfcqNvwQ7Vk6Kd-EHKvsc47_tANF0m2Q6xcCKzT64EDYFqXd-AxboDQB_iiGSviO9yWz51smiDscokeiIb5g"
+GROUP_ID = "223393123"  # ID группы (только цифры)
+YOUR_VK_ID = "194449436"  # Можно получить через vk.users.get()[0]['id']
 
 test_group_access(YOUR_TOKEN, GROUP_ID)
