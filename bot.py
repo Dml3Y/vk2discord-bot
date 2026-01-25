@@ -342,6 +342,12 @@ class VK2DiscordBot:
                     if post_key not in self.last_posts:
                         logger.info(f"Найден новый пост: {latest_post['id']}")
 
+                        # Проверяем, является ли пост закрепленным
+                        if latest_post.get('is_pinned') == 1:
+                            logger.info(f"📌 Пропускаем закрепленный пост (ID: {latest_post['id']})")
+                            self.last_posts[post_key] = datetime.now()
+                            continue
+
                         # Проверяем, содержит ли пост эмодзи 🎥
                         if self.contains_video_emoji(latest_post):
                             logger.info(f"⏭️ Пропускаем видео-пост с эмодзи 🎥 (ID: {latest_post['id']})")
