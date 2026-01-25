@@ -223,7 +223,7 @@ class VK2DiscordBot:
             "title": f"{embed_title} from {group_info.get('name', 'Group')}",
             "description": text,
             "url": post_url,
-            "color": 0x0099ff if is_calendar_post else 0xc4400f,
+            "color": 0xffffff,
             "timestamp": datetime.fromtimestamp(post.get('date', time.time())).isoformat(),
             "footer": {
                 "text": group_info.get('name', 'VK')
@@ -234,14 +234,14 @@ class VK2DiscordBot:
         for i, photo_url in enumerate(photo_urls[:9]):
             embeds.append({
                 "image": {"url": photo_url},
-                "color": 0x0099ff if is_calendar_post else 0xc4400f
+                "color": 0xffffff
             })
 
         # Если фото больше 9, показываем количество
         if len(photo_urls) > 9:
             embeds.append({
                 "description": f"📸 ...и еще {len(photo_urls) - 9} фото",
-                "color": 0x0099ff if is_calendar_post else 0xc4400f
+                "color": 0xffffff
             })
 
         message = {
