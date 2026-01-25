@@ -336,17 +336,24 @@ class VK2DiscordBot:
                     if not posts:
                         continue
 
-                    latest_post = posts[0]
+                    # Проверяем, является ли первый пост закрепленным
+                    # (закрепленные посты в VK всегда идут первыми)
+                    if len(posts) > 0 and posts[0].get('is_pinned') == 1:
+                        # Если первый пост закреплен, берем второй (если есть)
+                        if len(posts) > 1:
+                            latest_post = posts[1]
+                            logger.info(f"⏭️ Пропускаем закрепленный пост (ID: {posts[0]['id']})")
+                            logger.info(f"📝 Берем следующий пост (ID: {latest_post['id']})")
+                        else:
+                            logger.info(f"⏭️ Только закрепленный пост, пропускаем проверку")
+                            continue
+                    else:
+                        latest_post = posts[0]
+
                     post_key = f"{group_id}_{latest_post['id']}"
 
                     if post_key not in self.last_posts:
                         logger.info(f"Найден новый пост: {latest_post['id']}")
-
-                        # Проверяем, является ли пост закрепленным
-                        if latest_post.get('is_pinned') == 1:
-                            logger.info(f"📌 Пропускаем закрепленный пост (ID: {latest_post['id']})")
-                            self.last_posts[post_key] = datetime.now()
-                            continue
 
                         # Проверяем, содержит ли пост эмодзи 🎥
                         if self.contains_video_emoji(latest_post):
