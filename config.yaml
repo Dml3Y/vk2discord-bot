@@ -16,8 +16,8 @@ groups:
 #    name: "Павел Дуров"  # Опционально: имя для логов
 #    discord_channel: ""  # Опционально: отдельный webhook для этой группы
 
-  - id: "235318409"  # ID группы (цифры)
-    name: "vk2disTest" # Имя группы
+  - id: "223393123"  # ID группы (цифры)
+    name: "IRS | Invalid Racing Series | F1 25" # Имя группы
     discord_channel: ""  # Можно указать свой webhook
 
 # Настройки бота
