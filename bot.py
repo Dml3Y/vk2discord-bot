@@ -57,6 +57,9 @@ class VK2DiscordBot:
         # Состояние бота
         self.last_posts = {}
 
+        # Время запуска бота (для игнорирования старых постов)
+        self.start_time = time.time()
+
     def get_proxies(self) -> Dict:
         """Получение списка прокси для обхода блокировок"""
         free_proxies = [
@@ -70,6 +73,7 @@ class VK2DiscordBot:
             'https': free_proxies[0]
         }
 
+    # Метод не вызывается при запуске. При необходимости можно вызвать вручную.
     def test_discord_connection(self) -> bool:
         """Тестирование подключения к Discord для обоих вебхуков"""
         logger.info("Тестирование подключения к Discord...")
@@ -302,19 +306,51 @@ class VK2DiscordBot:
         logger.info("=" * 50)
         logger.info(f"Обычные посты: {self.discord_normal_webhook[:50]}...")
         logger.info(f"Календарные посты: {self.discord_calendar_webhook[:50]}...")
+        logger.info(f"Время запуска: {datetime.fromtimestamp(self.start_time)}")
 
-        # Инициализация групп
         groups = self.config.get('groups', [])
-        for group_config in groups:
-            group_id = group_config['id']
-            posts = self.get_last_posts(group_id, count=1)
-            if posts:
-                post_key = f"{group_id}_{posts[0]['id']}"
-                self.last_posts[post_key] = datetime.now()
-                logger.info(f"Инициализирована группа: {group_config.get('name', group_id)}")
-
         interval = self.config.get('bot', {}).get('interval', 60)
         logger.info(f"Начинаем проверку с интервалом {interval} секунд")
+
+        # # Инициализация групп
+        # groups = self.config.get('groups', [])
+        # for group_config in groups:
+        #     group_id = group_config['id']
+        # #     posts = self.get_last_posts(group_id, count=1)
+        # #     if posts:
+        # #         post_key = f"{group_id}_{posts[0]['id']}"
+        # #         self.last_posts[post_key] = datetime.now()
+        # #         logger.info(f"Инициализирована группа: {group_config.get('name', group_id)}")
+        # #
+        # # interval = self.config.get('bot', {}).get('interval', 60)
+        # # logger.info(f"Начинаем проверку с интервалом {interval} секунд")
+        #     # Получаем два последних поста, чтобы корректно определить самый новый (с учётом закреплённого)
+        #     posts = self.get_last_posts(group_id, count=2)
+        #     if not posts:
+        #         continue
+        #
+        #     # Логика выбора последнего незакреплённого поста (как в основном цикле)
+        #     if len(posts) > 0 and posts[0].get('is_pinned') == 1:
+        #         if len(posts) > 1:
+        #             latest_post = posts[1]
+        #             logger.info(
+        #                 f"Группа {group_config.get('name', group_id)}: закреплённый пост пропущен, инициализируем последним обычным постом (ID: {latest_post['id']})")
+        #         else:
+        #             # Только закреплённый пост — сохраняем его, чтобы не отправить при старте
+        #             latest_post = posts[0]
+        #             logger.info(
+        #                 f"Группа {group_config.get('name', group_id)}: только закреплённый пост (ID: {latest_post['id']})")
+        #     else:
+        #         latest_post = posts[0]
+        #         logger.info(
+        #             f"Группа {group_config.get('name', group_id)}: инициализируем последним постом (ID: {latest_post['id']})")
+        #
+        #     post_key = f"{group_id}_{latest_post['id']}"
+        #     self.last_posts[post_key] = datetime.now()
+        #     logger.info(f"✅ Инициализирована группа: {group_config.get('name', group_id)}")
+        #
+        # interval = self.config.get('bot', {}).get('interval', 60)
+        # logger.info(f"Начинаем проверку с интервалом {interval} секунд")
 
         # Основной цикл
         while True:
@@ -345,8 +381,18 @@ class VK2DiscordBot:
 
                     post_key = f"{group_id}_{latest_post['id']}"
 
+                    # Проверяем, является ли пост новым (не обработанным в текущей сессии)
                     if post_key not in self.last_posts:
-                        logger.info(f"Найден новый пост: {latest_post['id']}")
+                        # Дополнительная проверка: пост должен быть создан после запуска бота
+                        post_time = latest_post.get('date', 0)
+                        if post_time < self.start_time:
+                            logger.info(
+                                f"⏭️ Пропускаем старый пост (ID: {latest_post['id']}), созданный до запуска бота")
+                            # Добавляем в last_posts, чтобы больше не проверять его в этой сессии
+                            self.last_posts[post_key] = datetime.now()
+                            continue
+
+                        logger.info(f"Найден новый пост: {latest_post['id']} (создан после запуска)")
 
                         # Проверяем, содержит ли пост эмодзи 🎥
                         if self.contains_video_emoji(latest_post):
@@ -398,32 +444,10 @@ class VK2DiscordBot:
 def main():
     """Точка входа"""
     try:
-        bot = None
-
-        # Сначала пробуем без прокси
-        logger.info("Пробуем запустить без прокси...")
-        bot_without_proxy = VK2DiscordBot(use_proxy=False)
-
-        # Тестируем Discord подключения
-        if bot_without_proxy.test_discord_connection():
-            bot = bot_without_proxy
-            logger.info("✅ Бот запущен без прокси")
-        else:
-            logger.warning("Discord недоступен. Пробуем с прокси...")
-            bot_with_proxy = VK2DiscordBot(use_proxy=True)
-            if bot_with_proxy.test_discord_connection():
-                bot = bot_with_proxy
-                logger.info("✅ Бот запущен с прокси")
-            else:
-                logger.error(
-                    "Не удалось подключиться к Discord даже с прокси. Бот будет работать, но отправка сообщений может не работать.")
-                bot = bot_with_proxy  # Все равно запускаем, но предупреждаем
-
-        if bot:
-            bot.run()
-        else:
-            logger.error("Не удалось инициализировать бота.")
-            sys.exit(1)
+        # При необходимости прокси можно включить, изменив значение или добавив флаг.
+        use_proxy = os.getenv('USE_PROXY', 'false').lower() == 'true'
+        bot = VK2DiscordBot(use_proxy=use_proxy)
+        bot.run()
 
     except Exception as e:
         logger.error(f"Критическая ошибка: {e}")
